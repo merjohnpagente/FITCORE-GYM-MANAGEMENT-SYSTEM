@@ -55,6 +55,26 @@ input,select,textarea,button{font-family:inherit;font-size:inherit}
 .form-group .field-error{font-size:11px;color:var(--red);margin-top:4px}
 .pw-toggle{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--gray-500);cursor:pointer;padding:4px;line-height:1;font-size:13px}
 .pw-toggle:hover{color:var(--white)}
+/* ======= PHONE FLAG PICKER ======= */
+.phone-wrap{position:relative;display:flex;align-items:stretch;gap:0}
+.phone-flag-btn{display:flex;align-items:center;gap:6px;background:var(--navy-700);border:1.5px solid var(--navy-600);border-right:none;border-radius:8px 0 0 8px;padding:0 12px;cursor:pointer;white-space:nowrap;transition:.2s;font-size:13px;font-weight:600;color:var(--white);flex-shrink:0;min-width:90px}
+.phone-flag-btn:hover{background:var(--navy-600)}
+.phone-flag-btn span#phoneFlag{font-size:18px;line-height:1}
+.phone-caret{font-size:9px;color:var(--gray-500);margin-left:2px}
+.phone-number-input{flex:1;padding:11px 14px;background:var(--navy-700);border:1.5px solid var(--navy-600);border-left:1px solid rgba(255,255,255,.08);border-radius:0 8px 8px 0;color:var(--white);outline:none;transition:.2s}
+.phone-number-input:focus{border-color:var(--orange);box-shadow:0 0 0 3px rgba(255,87,34,.12)}
+.phone-flag-btn.open{border-color:var(--orange);background:var(--navy-600)}
+.country-drop{position:absolute;top:calc(100% + 6px);left:0;width:290px;background:var(--navy-800);border:1.5px solid var(--orange);border-radius:10px;z-index:300;box-shadow:0 12px 40px rgba(0,0,0,.6);display:none;flex-direction:column;overflow:hidden}
+.country-drop.open{display:flex}
+.country-search{background:var(--navy-700);border:none;border-bottom:1px solid rgba(255,255,255,.07);color:var(--white);padding:10px 14px;outline:none;font-size:13px;width:100%}
+.country-search::placeholder{color:var(--gray-500)}
+.country-list{max-height:220px;overflow-y:auto}
+.country-item{display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;transition:.15s;font-size:13px;color:var(--gray-100)}
+.country-item:hover{background:rgba(255,87,34,.1);color:var(--white)}
+.country-item.selected{background:rgba(255,87,34,.12);color:var(--orange)}
+.country-item .ci-flag{font-size:18px;flex-shrink:0;width:24px;text-align:center}
+.country-item .ci-name{flex:1;font-weight:500}
+.country-item .ci-code{font-size:11px;color:var(--gray-500);font-family:monospace}
 .btn-primary{background:var(--orange);color:var(--white);border:none;border-radius:8px;padding:12px 24px;font-weight:800;cursor:pointer;transition:.2s;width:100%;font-size:13px;letter-spacing:1px;text-transform:uppercase}
 .btn-primary:hover{background:var(--orange-dark);transform:translateY(-1px);box-shadow:0 6px 20px rgba(255,87,34,.4)}
 .btn-primary:active{transform:translateY(0)}
@@ -615,12 +635,12 @@ select option{background:var(--navy-700)}
         <div id="loginError" class="error-msg"></div>
         <div class="form-group">
           <label>Username</label>
-          <input type="text" id="loginUser" placeholder="Enter username" autocomplete="username">
+          <input type="text" id="loginUser" placeholder="Enter username" autocomplete="username" onkeydown="if(event.key==='Enter')doLogin()">
         </div>
         <div class="form-group">
           <label>Password</label>
           <div class="input-wrap">
-            <input type="password" id="loginPass" placeholder="Enter password" autocomplete="current-password">
+            <input type="password" id="loginPass" placeholder="Enter password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
             <button type="button" class="pw-toggle" onclick="togglePw('loginPass',this)">&#9681;</button>
           </div>
         </div>
@@ -642,7 +662,18 @@ select option{background:var(--navy-700)}
         </div>
         <div class="form-group">
           <label>Contact Number *</label>
-          <input type="tel" id="regContact" placeholder="e.g. 09171234567" maxlength="11">
+          <div class="phone-wrap">
+            <div class="phone-flag-btn" id="phoneFlagBtn" onclick="toggleCountryDrop()">
+              <span id="phoneFlag">🇵🇭</span>
+              <span id="phoneDialCode">+63</span>
+              <span class="phone-caret">▾</span>
+            </div>
+            <input type="tel" id="regContact" placeholder="9171234567" class="phone-number-input">
+            <div class="country-drop" id="countryDrop">
+              <input type="text" class="country-search" id="countrySearch" placeholder="Search country..." oninput="filterCountries(this.value)" onclick="event.stopPropagation()">
+              <div class="country-list" id="countryList"></div>
+            </div>
+          </div>
         </div>
         <div class="form-group">
           <label>Username *</label>
@@ -659,7 +690,10 @@ select option{background:var(--navy-700)}
         </div>
         <div class="form-group">
           <label>Confirm Password *</label>
-          <input type="password" id="regPass2" placeholder="Repeat password">
+          <div class="input-wrap">
+            <input type="password" id="regPass2" placeholder="Repeat password">
+            <button type="button" class="pw-toggle" onclick="togglePw('regPass2',this)">&#9681;</button>
+          </div>
         </div>
         <div class="form-group">
           <label>Role *</label>
@@ -1098,19 +1132,35 @@ function doRegister(){
   const errEl=document.getElementById('regError');
   errEl.style.display='none';
   if(!name||!contact||!user||!pass||!pass2||!role){errEl.textContent='Please fill in all required fields.';errEl.style.display='block';return;}
-  if(!/^09\d{9}$/.test(contact)){errEl.textContent='Please enter a valid 11-digit contact number (e.g. 09171234567).';errEl.style.display='block';return;}
+  if(contact.replace(/\D/g,'').length<6){errEl.textContent='Please enter a valid contact number.';errEl.style.display='block';return;}
+  const dialCode=document.getElementById('phoneDialCode').textContent.trim();
+  const fullContact=dialCode+contact.replace(/^0/,'');
   if(role==='admin'){errEl.textContent='Admin accounts cannot be self-registered.';errEl.style.display='block';return;}
   if(pass.length<6){errEl.textContent='Password must be at least 6 characters.';errEl.style.display='block';return;}
   if(pass!==pass2){errEl.textContent='Passwords do not match. Please re-enter your password correctly.';errEl.style.display='block';return;}
   const users=DB.get(KEY.users);
   if(users.find(x=>x.username===user)){errEl.textContent='Username already taken. Please choose a different username.';errEl.style.display='block';return;}
-  users.push({id:uid(),name,contact,username:user,password:pass,role,status:'active',createdAt:today()});
+  users.push({id:uid(),name,contact:fullContact,username:user,password:pass,role,status:'active',createdAt:today()});
   DB.set(KEY.users,users);
   const suc=document.getElementById('regSuccess');
   suc.textContent='Account created! Redirecting to login...';suc.style.display='block';
   setTimeout(()=>{showLogin();document.getElementById('loginUser').value=user;suc.style.display='none';errEl.style.display='none';},2000);
 }
-function togglePw(id,btn){const el=document.getElementById(id);el.type=el.type==='password'?'text':'password';btn.textContent=el.type==='password'?'◎':'○';}
+function togglePw(id,btn){
+  const el=document.getElementById(id);
+  const newType=el.type==='password'?'text':'password';
+  el.type=newType;
+  btn.textContent=newType==='password'?'◎':'○';
+  // If toggling the main password field, sync confirm password too
+  if(id==='regPass'){
+    const el2=document.getElementById('regPass2');
+    if(el2){
+      el2.type=newType;
+      const btn2=el2.closest('.input-wrap')&&el2.closest('.input-wrap').querySelector('.pw-toggle');
+      if(btn2)btn2.textContent=newType==='password'?'◎':'○';
+    }
+  }
+}
 function updateStrength(val){
   const bars=[document.getElementById('ps1'),document.getElementById('ps2'),document.getElementById('ps3')];
   const lbl=document.getElementById('psLabel');
@@ -2516,6 +2566,89 @@ function closeSidebar(){
 document.addEventListener('click',function(e){
   if(window.innerWidth<=768&&e.target.closest('.nav-item')){closeSidebar();}
 });
+// ======================================================================
+// COUNTRY PHONE PICKER
+// ======================================================================
+const COUNTRIES=[
+  {flag:'🇵🇭',name:'Philippines',code:'+63'},
+  {flag:'🇺🇸',name:'United States',code:'+1'},
+  {flag:'🇬🇧',name:'United Kingdom',code:'+44'},
+  {flag:'🇦🇺',name:'Australia',code:'+61'},
+  {flag:'🇨🇦',name:'Canada',code:'+1'},
+  {flag:'🇯🇵',name:'Japan',code:'+81'},
+  {flag:'🇰🇷',name:'South Korea',code:'+82'},
+  {flag:'🇨🇳',name:'China',code:'+86'},
+  {flag:'🇮🇳',name:'India',code:'+91'},
+  {flag:'🇸🇬',name:'Singapore',code:'+65'},
+  {flag:'🇲🇾',name:'Malaysia',code:'+60'},
+  {flag:'🇮🇩',name:'Indonesia',code:'+62'},
+  {flag:'🇹🇭',name:'Thailand',code:'+66'},
+  {flag:'🇻🇳',name:'Vietnam',code:'+84'},
+  {flag:'🇭🇰',name:'Hong Kong',code:'+852'},
+  {flag:'🇹🇼',name:'Taiwan',code:'+886'},
+  {flag:'🇳🇿',name:'New Zealand',code:'+64'},
+  {flag:'🇦🇪',name:'UAE',code:'+971'},
+  {flag:'🇸🇦',name:'Saudi Arabia',code:'+966'},
+  {flag:'🇶🇦',name:'Qatar',code:'+974'},
+  {flag:'🇧🇭',name:'Bahrain',code:'+973'},
+  {flag:'🇰🇼',name:'Kuwait',code:'+965'},
+  {flag:'🇴🇲',name:'Oman',code:'+968'},
+  {flag:'🇩🇪',name:'Germany',code:'+49'},
+  {flag:'🇫🇷',name:'France',code:'+33'},
+  {flag:'🇮🇹',name:'Italy',code:'+39'},
+  {flag:'🇪🇸',name:'Spain',code:'+34'},
+  {flag:'🇵🇹',name:'Portugal',code:'+351'},
+  {flag:'🇳🇱',name:'Netherlands',code:'+31'},
+  {flag:'🇧🇪',name:'Belgium',code:'+32'},
+  {flag:'🇨🇭',name:'Switzerland',code:'+41'},
+  {flag:'🇸🇪',name:'Sweden',code:'+46'},
+  {flag:'🇳🇴',name:'Norway',code:'+47'},
+  {flag:'🇩🇰',name:'Denmark',code:'+45'},
+  {flag:'🇫🇮',name:'Finland',code:'+358'},
+  {flag:'🇷🇺',name:'Russia',code:'+7'},
+  {flag:'🇧🇷',name:'Brazil',code:'+55'},
+  {flag:'🇲🇽',name:'Mexico',code:'+52'},
+  {flag:'🇦🇷',name:'Argentina',code:'+54'},
+  {flag:'🇿🇦',name:'South Africa',code:'+27'},
+  {flag:'🇳🇬',name:'Nigeria',code:'+234'},
+  {flag:'🇰🇪',name:'Kenya',code:'+254'},
+  {flag:'🇬🇭',name:'Ghana',code:'+233'},
+  {flag:'🇵🇰',name:'Pakistan',code:'+92'},
+  {flag:'🇧🇩',name:'Bangladesh',code:'+880'},
+  {flag:'🇱🇰',name:'Sri Lanka',code:'+94'},
+  {flag:'🇳🇵',name:'Nepal',code:'+977'},
+  {flag:'🇲🇲',name:'Myanmar',code:'+95'},
+  {flag:'🇰🇭',name:'Cambodia',code:'+855'},
+  {flag:'🇧🇳',name:'Brunei',code:'+673'},
+  {flag:'🇵🇬',name:'Papua New Guinea',code:'+675'},
+];
+let selectedCountry=COUNTRIES[0];
+function renderCountryList(filter=''){
+  const list=document.getElementById('countryList');
+  if(!list)return;
+  const filtered=filter?COUNTRIES.filter(c=>c.name.toLowerCase().includes(filter.toLowerCase())||c.code.includes(filter)):COUNTRIES;
+  list.innerHTML=filtered.map(c=>`<div class="country-item${c.code===selectedCountry.code&&c.name===selectedCountry.name?' selected':''}" onclick="selectCountry('${c.flag}','${c.name}','${c.code}')"><span class="ci-flag">${c.flag}</span><span class="ci-name">${c.name}</span><span class="ci-code">${c.code}</span></div>`).join('');
+}
+function filterCountries(val){renderCountryList(val);}
+function selectCountry(flag,name,code){
+  selectedCountry={flag,name,code};
+  document.getElementById('phoneFlag').textContent=flag;
+  document.getElementById('phoneDialCode').textContent=code;
+  closeCountryDrop();
+}
+function toggleCountryDrop(){
+  const drop=document.getElementById('countryDrop');
+  const btn=document.getElementById('phoneFlagBtn');
+  const isOpen=drop.classList.contains('open');
+  if(isOpen){closeCountryDrop();}
+  else{drop.classList.add('open');btn.classList.add('open');renderCountryList();document.getElementById('countrySearch').value='';setTimeout(()=>document.getElementById('countrySearch').focus(),50);}
+}
+function closeCountryDrop(){
+  document.getElementById('countryDrop').classList.remove('open');
+  document.getElementById('phoneFlagBtn').classList.remove('open');
+}
+document.addEventListener('click',function(e){
+  if(!e.target.closest('.phone-wrap'))closeCountryDrop();
+});
 </script>
-</body>
 </html>
