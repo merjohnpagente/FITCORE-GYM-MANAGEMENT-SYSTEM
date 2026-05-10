@@ -652,33 +652,7 @@ select option{background:var(--navy-700)}
     <div class="inner-page">
       <h2 class="inner-title">Explore <span>Plans</span></h2>
       <p class="inner-sub">Flexible membership options designed to fit every goal and budget.</p>
-      <div class="explore-cards">
-        <div class="explore-card">
-          <div class="ec-badge">Starter</div>
-          <div class="ec-name">Basic</div>
-          <div class="ec-price">&#8369;500<span>/mo</span></div>
-          <ul class="ec-features"><li>&#10003; Gym Access</li><li>&#10003; Locker Use</li><li>&#10003; 8 Sessions</li></ul>
-        </div>
-        <div class="explore-card featured">
-          <div class="ec-badge">Popular</div>
-          <div class="ec-name">Standard</div>
-          <div class="ec-price">&#8369;900<span>/mo</span></div>
-          <ul class="ec-features"><li>&#10003; Gym Access</li><li>&#10003; Locker Use</li><li>&#10003; 16 Sessions</li><li>&#10003; 1 Trainer Session</li></ul>
-        </div>
-        <div class="explore-card">
-          <div class="ec-badge">Best Value</div>
-          <div class="ec-name">Premium</div>
-          <div class="ec-price">&#8369;1,500<span>/3mo</span></div>
-          <ul class="ec-features"><li>&#10003; Full Access</li><li>&#10003; Priority Trainer</li><li>&#10003; Unlimited Sessions</li><li>&#10003; Free Assessment</li></ul>
-        </div>
-        <div class="explore-card walkin-card">
-          <div class="ec-badge">No Commitment</div>
-          <div class="ec-name">Walk-In</div>
-          <div class="ec-price">&#8369;100<span>/day</span></div>
-          <ul class="ec-features"><li>&#10003; Full Gym Access</li><li>&#10003; Single Day Pass</li><li>&#10003; No Registration</li><li>&#10003; Pay at Front Desk</li></ul>
-          <div class="walkin-note">&#9888; For occasional visitors.<br>No membership required.</div>
-        </div>
-      </div>
+      <div class="explore-cards" id="exploreCardsContainer"></div>
     </div>
   </div>
 
@@ -961,7 +935,7 @@ select option{background:var(--navy-700)}
 
 <!-- ============================================================ MODALS ============================================================ -->
 <!-- Generic Confirm -->
-<div class="modal-overlay" id="confirmModal">
+<div class="modal-overlay" id="confirmModal" style="z-index:1100;background:rgba(0,0,0,.5);backdrop-filter:blur(2px)">
   <div class="modal" style="max-width:460px">
     <div class="modal-head"><h2 id="confirmTitle">Confirm Action</h2><button class="modal-close" onclick="closeModal('confirmModal')">✕</button></div>
     <div class="modal-body"><div class="confirm-dialog"><p id="confirmMsg"></p><div class="confirm-btns" style="margin-top:16px"><button class="btn-secondary btn-sm" onclick="closeModal('confirmModal')">Cancel</button><button class="btn-danger btn-sm" id="confirmOkBtn">Delete</button></div></div></div>
@@ -1096,6 +1070,18 @@ select option{background:var(--navy-700)}
       <div class="form-group"><label>Notes</label><textarea id="sf_notes" rows="2"></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn-secondary" onclick="closeModal('sessionModal')">Cancel</button><button class="btn-primary" onclick="saveSession()">Save Session</button></div>
+  </div>
+</div>
+
+<!-- Session Info Modal -->
+<div class="modal-overlay" id="sessionInfoModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Session Details</h2>
+      <button class="modal-close" onclick="closeModal('sessionInfoModal')">✕</button>
+    </div>
+    <div class="modal-body" id="sessionInfoBody" style="padding:24px"></div>
+    <div class="modal-foot" id="sessionInfoFoot"></div>
   </div>
 </div>
 <!-- Plan Modal -->
@@ -1251,7 +1237,7 @@ select option{background:var(--navy-700)}
 
 <script>
 // ============================= DATA LAYER =============================
-const KEY={users:'gms_users',members:'gms_members',payments:'gms_payments',sessions:'gms_sessions',plans:'gms_plans',attendance:'gms_attendance',walkins:'gms_walkins',loginAttempts:'gms_login_attempts'};
+const KEY={users:'gms_users',members:'gms_members',payments:'gms_payments',sessions:'gms_sessions',plans:'gms_plans',attendance:'gms_attendance',walkins:'gms_walkins',loginAttempts:'gms_login_attempts',activityLog:'gms_activity_log'};
 const DB={
   get:(k)=>{try{return JSON.parse(localStorage.getItem(k))||[];}catch{return[];}},
   getObj:(k)=>{try{const v=JSON.parse(localStorage.getItem(k));return(v&&typeof v==='object'&&!Array.isArray(v))?v:{};}catch{return{};}},
@@ -1331,6 +1317,7 @@ function showLandingSection(section, linkEl) {
   const target = document.getElementById('landing' + section.charAt(0).toUpperCase() + section.slice(1));
   if(target) target.style.display = 'flex';
   if(section === 'explore' && extraEl) extraEl.style.display = 'block';
+  if(section === 'explore') renderExplorePlans();
   document.querySelectorAll('.ln-link').forEach(l => l.classList.remove('active'));
   if(linkEl) linkEl.classList.add('active');
   // Hide LOG IN button when already on the login/register section
@@ -1744,7 +1731,7 @@ function renderMembers(){
     <div class="table-controls">
       <input class="search-input" placeholder="🔍 Search by name or ID…" value="${memberSearch}" oninput="memberSearch=this.value;memberPage=1;refreshMemberTable()">
       <select class="filter-sel" onchange="memberStatusFilter=this.value;memberPage=1;refreshMemberTable()">
-        <option>All</option><option>Active</option><option>Expired</option><option>Expiring Soon</option><option>Suspended</option>
+        <option>All</option><option>Active</option><option>Expired</option><option>Expiring Soon</option>
       </select>
       <select class="filter-sel" onchange="memberPlanFilter=this.value;memberPage=1;refreshMemberTable()">
         <option value="All">All Plans</option>${planOpts}
@@ -1875,41 +1862,66 @@ function saveMember(){
     ecName:document.getElementById('mf_ecname').value.trim(),ecNum:document.getElementById('mf_ecnum').value.trim(),
     notes:document.getElementById('mf_notes').value.trim(),status:'Active'
   };
-  if(editingMemberId){
-    const idx=members.findIndex(m=>m.id===editingMemberId);
-    if(idx>-1)members[idx]={...members[idx],...data,editedBy:currentUser.name,editedByUsername:currentUser.username,editedByRole:currentUser.role,editedAt:today()};
-    DB.set(KEY.members,members);toast('Member updated successfully.');
-  } else {
-    const newId=nextId(KEY.members,'MEM');
-    members.push({id:newId,...data,createdBy:currentUser.name,createdByUsername:currentUser.username,createdByRole:currentUser.role,createdAt:today()});
-    DB.set(KEY.members,members);
-    // AUTO-CREATE PAYMENT RECORD
-    const payDate=document.getElementById('mf_paydate').value||today();
-    const amount=parseFloat(document.getElementById('mf_amount').value)||plan.price;
-    const method=document.getElementById('mf_method').value;
-    const payNotes=document.getElementById('mf_paynotes').value.trim();
-    const newExpiry=expiryDate;
-    const payments=DB.get(KEY.payments);
-    const newPayId=nextId(KEY.payments,'PAY');
-    payments.push({
-      id:newPayId,memberId:newId,memberName:name,
-      planId,planName:plan?plan.name:'Unknown',
-      amount,date:payDate,newExpiry,method,
-      notes:payNotes,
-      recordedBy:currentUser.name,
-      recordedByUsername:currentUser.username,
-      status:'Paid',createdAt:today()
-    });
-    DB.set(KEY.payments,payments);
-    toast('Member added & payment recorded successfully.');
-  }
-  closeModal('memberModal');renderMembers();scanRenewals();updateHeroMemberCount();
+  const confirmTitle=editingMemberId?'Update Member':'Add New Member';
+  const confirmMsg=editingMemberId
+    ?`Save changes to <strong>${name}</strong>? Billing records linked to this member will also be synced automatically.`
+    :`Add <strong>${name}</strong> as a new member under the <strong>${plan?plan.name:'selected'}</strong> plan? A payment record will be created automatically.`;
+  openConfirm(confirmTitle, confirmMsg, ()=>{
+    if(editingMemberId){
+      const idx=members.findIndex(m=>m.id===editingMemberId);
+      if(idx>-1)members[idx]={...members[idx],...data,editedBy:currentUser.name,editedByUsername:currentUser.username,editedByRole:currentUser.role,editedAt:today()};
+      DB.set(KEY.members,members);
+      // AUTO-SYNC: update all linked payment records with new member info
+      const payments=DB.get(KEY.payments);
+      let payUpdated=false;
+      payments.forEach(p=>{
+        if(p.memberId===editingMemberId){
+          p.memberName=name;
+          if(planId&&planId!==p.planId){
+            p.planId=planId;
+            p.planName=plan?plan.name:p.planName;
+            p.newExpiry=addMonths(p.date,plan?plan.duration:1);
+          }
+          p.syncedAt=today();
+          payUpdated=true;
+        }
+      });
+      if(payUpdated)DB.set(KEY.payments,payments);
+      logActivity('Edited','Member',name,'ID: '+editingMemberId);
+      toast('Member updated. Billing records synced automatically.');
+    } else {
+      const newId=nextId(KEY.members,'MEM');
+      members.push({id:newId,...data,createdBy:currentUser.name,createdByUsername:currentUser.username,createdByRole:currentUser.role,createdAt:today()});
+      DB.set(KEY.members,members);
+      logActivity('Added','Member',name,'ID: '+newId+' | Plan: '+(plan?plan.name:''));
+      // AUTO-CREATE PAYMENT RECORD
+      const payDate=document.getElementById('mf_paydate').value||today();
+      const amount=parseFloat(document.getElementById('mf_amount').value)||plan.price;
+      const method=document.getElementById('mf_method').value;
+      const payNotes=document.getElementById('mf_paynotes').value.trim();
+      const payments=DB.get(KEY.payments);
+      const newPayId=nextId(KEY.payments,'PAY');
+      payments.push({
+        id:newPayId,memberId:newId,memberName:name,
+        planId,planName:plan?plan.name:'Unknown',
+        amount,date:payDate,newExpiry:expiryDate,method,
+        notes:payNotes,
+        recordedBy:currentUser.name,
+        recordedByUsername:currentUser.username,
+        status:'Paid',createdAt:today()
+      });
+      DB.set(KEY.payments,payments);
+      toast('Member added & payment recorded successfully.');
+    }
+    closeModal('memberModal');renderMembers();scanRenewals();updateHeroMemberCount();
+    if(document.getElementById('billingTableCard'))refreshBillingTable();
+  },'Save','btn-primary');
 }
 function deleteMember(id){
   const m=DB.getOne(KEY.members,id);
   openConfirm('Delete Member',`Are you sure you want to delete ${m?m.name:'this member'}? This cannot be undone.`,()=>{
     const members=DB.get(KEY.members);const idx=members.findIndex(m=>m.id===id);
-    if(idx>-1)members[idx].status='Archived';
+    if(idx>-1){logActivity('Deleted','Member',members[idx].name,'ID: '+members[idx].id+' | Plan: '+(DB.get(KEY.plans).find(p=>p.id===members[idx].planId)||{name:'—'}).name);members[idx].status='Archived';}
     DB.set(KEY.members,members);toast('Member archived.');renderMembers();
   });
 }
@@ -1998,7 +2010,7 @@ function refreshBillingTable(){
     <td>${formatDate(p.date)}</td><td>${formatDate(p.newExpiry)}</td>
     <td>${p.recordedBy||'—'}</td><td>${p.method||'—'}</td>
     <td><span class="badge badge-paid">Paid</span></td>
-    <td>${p.source==='renewal'?'<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:5px;background:rgba(255,193,7,.15);color:var(--gold);letter-spacing:.5px;border:1px solid rgba(255,193,7,.3)">🔄 RENEWAL</span>':'<span style="font-size:10px;color:var(--gray-500)">—</span>'}</td>
+    <td>${p.source==='renewal'?'<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:5px;background:rgba(255,193,7,.15);color:var(--gold);letter-spacing:.5px;border:1px solid rgba(255,193,7,.3)">🔄 RENEWAL</span>':p.syncedAt?'<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;background:rgba(121,134,255,.12);color:#7986ff;letter-spacing:.5px;border:1px solid rgba(121,134,255,.25)" title="Auto-synced when member info was edited">🔗 SYNCED</span>':'<span style="font-size:10px;color:var(--gray-500)">—</span>'}</td>
     <td><div class="td-actions"><button class="btn-icon" title="View Receipt" onclick="viewReceipt('${p.id}')">🧾</button></div></td>
   </tr>`).join(''):`<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">💳</div><p>No payments found</p></div></td></tr>`;
   let pag='';if(pages>1){pag=`<div class="pagination"><button class="page-btn" onclick="billingPage=${billingPage-1};refreshBillingTable()" ${billingPage===1?'disabled':''}>‹</button>${Array.from({length:pages},(_,i)=>`<button class="page-btn ${i+1===billingPage?'active':''}" onclick="billingPage=${i+1};refreshBillingTable()">${i+1}</button>`).join('')}<button class="page-btn" onclick="billingPage=${billingPage+1};refreshBillingTable()" ${billingPage===pages?'disabled':''}>›</button><span class="page-info">${total} records</span></div>`;}
@@ -2054,27 +2066,49 @@ function savePayment(){
   const amount=parseFloat(document.getElementById('pf_amount').value);
   const date=document.getElementById('pf_date').value;
   const method=document.getElementById('pf_method').value;
+  const notes=document.getElementById('pf_notes').value.trim();
   const err=document.getElementById('paymentFormError');
   err.style.display='none';
   if(!memberId||!planId||!amount||!date||!method){err.textContent='Please fill in all required fields.';err.style.display='block';return;}
-  if(!memberId){err.textContent='No member found. Please verify the search details or register the member first.';err.style.display='block';return;}
   if(amount<=0){err.textContent='Invalid payment amount. Please enter a valid amount greater than zero.';err.style.display='block';return;}
   const member=DB.getOne(KEY.members,memberId);
   const plan=DB.getOne(KEY.plans,planId);
   const newExpiry=addMonths(date,plan?plan.duration:1);
-  const payments=DB.get(KEY.payments);
-  const newId=nextId(KEY.payments,'PAY');
   const fromRenewal=document.getElementById('paymentModal').dataset.fromRenewal==='1';
-  payments.push({id:newId,memberId,memberName:member?member.name:'Unknown',planId,planName:plan?plan.name:'Unknown',amount,date,newExpiry,method,notes:document.getElementById('pf_notes').value.trim(),recordedBy:currentUser.name,recordedByUsername:currentUser.username,status:'Paid',source:fromRenewal?'renewal':'billing',createdAt:today()});
-  DB.set(KEY.payments,payments);
-  // Update member
-  const members=DB.get(KEY.members);const idx=members.findIndex(m=>m.id===memberId);
-  if(idx>-1){members[idx].planId=planId;members[idx].expiryDate=newExpiry;members[idx].status='Active';}
-  DB.set(KEY.members,members);
-  _dismissedIds.add(memberId);
-  document.getElementById('paymentModal').dataset.fromRenewal='';
-  toast('Payment recorded successfully.');closeModal('paymentModal');renderBilling();scanRenewals();
-  if(fromRenewal){setTimeout(()=>{navigate('notifications');viewRenewalReceipt(newId);},300);}
+  const confirmTitle=fromRenewal?'🔄 Confirm Renewal Payment':'💳 Confirm Payment';
+  const memberInitials=member?member.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2):'?';
+  const confirmMsg='Are you sure you want to record this payment?'
+    +'<div style="margin-top:12px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:12px 14px;font-size:12px;line-height:1.9">'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.06)">'
+    +'<div style="width:36px;height:36px;border-radius:8px;background:var(--orange);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;flex-shrink:0">'+memberInitials+'</div>'
+    +'<div><div style="font-weight:700;color:var(--white);font-size:13px">'+(member?member.name:'Unknown')+'</div>'
+    +'<div style="color:var(--gray-500);font-size:11px;font-family:monospace">'+(member?member.id:'')+'</div></div>'
+    +(fromRenewal?'<span style="margin-left:auto;font-size:9px;font-weight:800;padding:3px 8px;border-radius:4px;background:rgba(255,193,7,.15);color:var(--gold);text-transform:uppercase;border:1px solid rgba(255,193,7,.3)">🔄 RENEWAL</span>':'<span style="margin-left:auto;font-size:9px;font-weight:800;padding:3px 8px;border-radius:4px;background:rgba(0,230,118,.12);color:var(--green);text-transform:uppercase">NEW</span>')
+    +'</div>'
+    +'<div><span style="color:var(--gray-500);width:100px;display:inline-block">Plan:</span> <strong style="color:var(--white)">'+(plan?plan.name:'Unknown')+'</strong></div>'
+    +'<div><span style="color:var(--gray-500);width:100px;display:inline-block">Method:</span> <strong style="color:var(--white)">'+method+'</strong></div>'
+    +'<div><span style="color:var(--gray-500);width:100px;display:inline-block">Amount:</span> <strong style="color:var(--green)">₱'+Number(amount).toLocaleString()+'</strong></div>'
+    +'<div><span style="color:var(--gray-500);width:100px;display:inline-block">Payment Date:</span> <strong style="color:var(--white)">'+formatDate(date)+'</strong></div>'
+    +'<div><span style="color:var(--gray-500);width:100px;display:inline-block">New Expiry:</span> <strong style="color:var(--white)">'+formatDate(newExpiry)+'</strong></div>'
+    +'</div>'
+    +'<div style="margin-top:10px;font-size:11px;color:#7986ff;background:rgba(61,90,254,.06);border:1px solid rgba(61,90,254,.2);border-radius:6px;padding:8px 12px">&#128161; This will record the payment and update the member expiry date.</div>';
+  openConfirm(confirmTitle,confirmMsg,function(){
+    const payments=DB.get(KEY.payments);
+    const newId=nextId(KEY.payments,'PAY');
+    payments.push({id:newId,memberId,memberName:member?member.name:'Unknown',planId,planName:plan?plan.name:'Unknown',amount,date,newExpiry,method,notes,recordedBy:currentUser.name,recordedByUsername:currentUser.username,status:'Paid',source:fromRenewal?'renewal':'billing',createdAt:today()});
+    DB.set(KEY.payments,payments);
+    const members=DB.get(KEY.members);
+    const idx=members.findIndex(m=>m.id===memberId);
+    if(idx>-1){members[idx].planId=planId;members[idx].expiryDate=newExpiry;members[idx].status='Active';}
+    DB.set(KEY.members,members);
+    _dismissedIds.add(memberId);
+    document.getElementById('paymentModal').dataset.fromRenewal='';
+    toast('Payment recorded successfully.');
+    closeModal('paymentModal');
+    renderBilling();
+    scanRenewals();
+    if(fromRenewal){setTimeout(function(){navigate('notifications');viewRenewalReceipt(newId);},300);}
+  },'Confirm','btn-primary');
 }
 function deletePayment(id){
   const p=DB.getOne(KEY.payments,id);if(!p)return;
@@ -2136,6 +2170,9 @@ function saveEditPayment(){
 function viewRenewalReceipt(id){viewReceipt(id);}
 function viewReceipt(id){
   const p=DB.getOne(KEY.payments,id);if(!p)return;
+  // Always pull the latest member name from the members DB (reflects edits)
+  const liveMember=DB.getOne(KEY.members,p.memberId);
+  const displayMemberName=liveMember?liveMember.name:p.memberName;
   const users=DB.get(KEY.users);
   let staffDisplay=p.recordedBy||'—';
   const match=users.find(u=>
@@ -2164,7 +2201,7 @@ function viewReceipt(id){
     ${isRenewal?`<div style="background:rgba(255,193,7,.1);border:1px solid rgba(255,193,7,.3);border-radius:8px;padding:8px 14px;margin-bottom:10px;text-align:center;font-size:11px;font-weight:800;letter-spacing:1px;color:var(--gold)">🔄 RENEWAL PAYMENT</div>`:''}
     <hr class="receipt-divider">
     <div class="receipt-row"><span>Receipt No.</span><span>${p.id}</span></div>
-    <div class="receipt-row"><span>Member</span><span>${p.memberName}</span></div>
+    <div class="receipt-row"><span>Member</span><span>${displayMemberName}</span></div>
     <div class="receipt-row"><span>Member ID</span><span>${p.memberId}</span></div>
     <hr class="receipt-divider">
     <div class="receipt-row"><span>Membership Plan</span><span>${p.planName}</span></div>
@@ -2252,6 +2289,88 @@ function getSchedSessions(){
   if(schedTrainerFilter!=='all')s=s.filter(x=>x.trainerId===schedTrainerFilter);
   return s;
 }
+
+function viewSession(id){
+  const sessions=DB.get(KEY.sessions);
+  const s=sessions.find(x=>x.id===id);
+  if(!s)return;
+  const statusColor=s.status==='Completed'?'#00e676':s.status==='Cancelled'?'#ff1744':'#ffc107';
+  const statusIcon=s.status==='Completed'?'✓ Completed':s.status==='Cancelled'?'✕ Cancelled':'● Scheduled';
+  const statusBg=s.status==='Completed'?'rgba(0,230,118,.12)':s.status==='Cancelled'?'rgba(255,23,68,.12)':'rgba(255,193,7,.12)';
+  const isMySession=currentUser.role==='trainer'&&s.trainerId===currentUser.id;
+  const body=document.getElementById('sessionInfoBody');
+  body.innerHTML=`
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--gray-500);margin-bottom:4px">Session Type</div>
+          <div style="font-size:18px;font-weight:800;color:var(--white)">${s.type||'—'}</div>
+        </div>
+        <div style="background:${statusBg};border:1px solid ${statusColor}44;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:800;color:${statusColor};letter-spacing:.5px;text-transform:uppercase">${statusIcon}</div>
+      </div>
+      <hr style="border:none;border-top:1px solid rgba(255,255,255,.06)">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div style="background:var(--navy-700);border-radius:8px;padding:14px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--gray-500);margin-bottom:6px">👤 Member</div>
+          <div style="font-size:14px;font-weight:700;color:var(--white)">${s.memberName||'—'}</div>
+        </div>
+        <div style="background:var(--navy-700);border-radius:8px;padding:14px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--gray-500);margin-bottom:6px">🏋️ Trainer</div>
+          <div style="font-size:14px;font-weight:700;color:var(--white)">${s.trainerName||'—'}</div>
+        </div>
+        <div style="background:var(--navy-700);border-radius:8px;padding:14px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--gray-500);margin-bottom:6px">📅 Date</div>
+          <div style="font-size:14px;font-weight:700;color:var(--white)">${formatDate(s.date)}</div>
+        </div>
+        <div style="background:var(--navy-700);border-radius:8px;padding:14px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--gray-500);margin-bottom:6px">🕐 Time</div>
+          <div style="font-size:14px;font-weight:700;color:var(--white)">${s.start} – ${s.end}</div>
+        </div>
+      </div>
+      ${s.notes?`<div style="background:var(--navy-700);border-radius:8px;padding:14px"><div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--gray-500);margin-bottom:6px">📝 Notes</div><div style="font-size:13px;color:var(--gray-100);line-height:1.6">${s.notes}</div></div>`:''}
+      <div style="background:var(--navy-700);border-radius:8px;padding:14px">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--gray-500);margin-bottom:8px">🕓 History</div>
+        <div style="font-size:12px;color:var(--gray-300)">Created by <strong style="color:var(--gray-100)">${s.createdBy||'—'}</strong>${s.createdAt?' on '+formatDate(s.createdAt):''}</div>
+        ${s.editedBy?`<div style="font-size:12px;color:var(--gray-300);margin-top:4px">Last edited by <strong style="color:var(--gray-100)">${s.editedBy}</strong>${s.editedAt?' on '+formatDate(s.editedAt):''}</div>`:''}
+        ${(currentUser.role==='admin'||currentUser.role==='staff')&&s.statusLog&&s.statusLog.length?`
+        <div style="margin-top:12px;border-top:1px solid rgba(255,255,255,.06);padding-top:12px">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--gray-500);margin-bottom:8px">🔄 Status Changes by Trainer</div>
+          ${s.statusLog.map(log=>{
+            const roleColorMap={admin:'var(--orange)',staff:'#7986ff',trainer:'var(--green)'};
+            const clr=roleColorMap[log.byRole]||'var(--gray-300)';
+            const fromClr=log.from==='Completed'?'#00e676':log.from==='Cancelled'?'#ff1744':'#ffc107';
+            const toClr=log.to==='Completed'?'#00e676':log.to==='Cancelled'?'#ff1744':'#ffc107';
+            const timeStr=log.at?new Date(log.at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+            return`<div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;background:rgba(255,255,255,.03);border-radius:6px;padding:8px 10px">
+              <div style="flex:1">
+                <div style="font-size:12px;color:var(--gray-100);font-weight:600">${log.by||'—'} <span style="font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;background:rgba(255,255,255,.07);color:${clr};margin-left:2px;text-transform:uppercase">${log.byRole||''}</span></div>
+                <div style="font-size:11px;color:var(--gray-500);margin-top:2px">${timeStr}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700">
+                <span style="color:${fromClr};background:rgba(255,255,255,.05);padding:2px 8px;border-radius:4px">${log.from}</span>
+                <span style="color:var(--gray-500)">→</span>
+                <span style="color:${toClr};background:rgba(255,255,255,.05);padding:2px 8px;border-radius:4px">${log.to}</span>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>`:''}
+      </div>
+    </div>`;
+  const foot=document.getElementById('sessionInfoFoot');
+  if(isMySession&&s.status==='Scheduled'){
+    foot.innerHTML=`<button class="btn-secondary" onclick="closeModal('sessionInfoModal')">Close</button>
+      <button class="btn-primary" style="background:#00c853;border-color:#00c853" onclick="markSessionDone('${id}');closeModal('sessionInfoModal')">✓ Mark as Done</button>
+      <button class="btn-danger" onclick="toggleSessionStatus('${id}');closeModal('sessionInfoModal')">✕ Cancel Session</button>`;
+  } else {
+    foot.innerHTML=`<button class="btn-secondary" onclick="closeModal('sessionInfoModal')">Close</button>`;
+    if((currentUser.role==='admin'||currentUser.role==='staff')&&s.status!=='Cancelled'){
+      foot.innerHTML=`<button class="btn-secondary" onclick="closeModal('sessionInfoModal')">Close</button>
+        <button class="btn-primary" onclick="closeModal('sessionInfoModal');editSession('${id}')">✏️ Edit</button>`;
+    }
+  }
+  openModal('sessionInfoModal');
+}
+
 function renderWeekView(){
   const sessions=getSchedSessions();
   const mon=getMondayOf(today());
@@ -2270,7 +2389,7 @@ function renderWeekView(){
       const clr=getColor(s.trainerId);
       const isMyBlock=currentUser.role==='trainer'&&s.trainerId===currentUser.id;
       const isOtherTrainer=currentUser.role==='trainer'&&s.trainerId!==currentUser.id;
-      const clickAttr=isMyBlock?`onclick="toggleSessionStatus('${s.id}')"`:(!isOtherTrainer?`onclick="editSession('${s.id}')"`:'' );
+      const clickAttr=isMyBlock?`onclick="viewSession('${s.id}')"`:(!isOtherTrainer?`onclick="viewSession('${s.id}')"`:'' );
       const blockCursor=isOtherTrainer?'default':(currentUser.role==='trainer'?'pointer':'pointer');
       const blockOpacity=isOtherTrainer?'0.45':'1';
       const statusColor=s.status==='Completed'?'#00e676':s.status==='Cancelled'?'#ff1744':'#ffc107';
@@ -2335,9 +2454,16 @@ function markSessionDone(id){
   const idx=sessions.findIndex(s=>s.id===id);
   if(idx<0)return;
   if(sessions[idx].trainerId!==currentUser.id){toast('You can only mark your own sessions as done.','error');return;}
+  const prevStatus=sessions[idx].status;
   sessions[idx].status='Completed';
   sessions[idx].completedAt=today();
   sessions[idx].completedBy=currentUser.username;
+  if(!sessions[idx].statusLog)sessions[idx].statusLog=[];
+  sessions[idx].statusLog.push({
+    from:prevStatus,to:'Completed',
+    by:currentUser.name,byUsername:currentUser.username,byRole:currentUser.role,
+    at:new Date().toISOString()
+  });
   DB.set(KEY.sessions,sessions);
   toast('Session marked as completed. Great work!','success');
   renderSchedule();
@@ -2388,12 +2514,15 @@ function filterSessionMember(val){
   if(!members.length){list.style.display='none';return;}
   list.innerHTML='';
   members.forEach(function(m){
+    const isExpired=m.status==='Expired';
     const div=document.createElement('div');
-    div.style.cssText='padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid rgba(255,255,255,.05)';
-    div.textContent=m.name;
-    div.addEventListener('mousedown',function(){selectSessMember(m.id,m.name);});
-    div.addEventListener('mouseover',function(){this.style.background='rgba(249,115,22,.1)';});
-    div.addEventListener('mouseout',function(){this.style.background='';});
+    div.style.cssText='padding:8px 12px;font-size:13px;border-bottom:1px solid rgba(255,255,255,.05);display:flex;align-items:center;justify-content:space-between;'+(isExpired?'cursor:not-allowed;opacity:0.5;':'cursor:pointer;');
+    div.innerHTML=m.name+(isExpired?'<span style="font-size:10px;font-weight:800;color:#ff1744;background:rgba(255,23,68,.12);padding:2px 7px;border-radius:4px;letter-spacing:.5px;margin-left:8px;">EXPIRED</span>':'');
+    if(!isExpired){
+      div.addEventListener('mousedown',function(){selectSessMember(m.id,m.name);});
+      div.addEventListener('mouseover',function(){this.style.background='rgba(249,115,22,.1)';});
+      div.addEventListener('mouseout',function(){this.style.background='';});
+    }
     list.appendChild(div);
   });
   list.style.display='block';
@@ -2413,6 +2542,8 @@ function saveSession(){
   const err=document.getElementById('sessionFormError');
   err.style.display='none';
   if(!trainerId||!memberId||!type||!date||!start||!end){err.textContent='Please fill in all required fields.';err.style.display='block';return;}
+  const memberCheck=DB.getOne(KEY.members,memberId);
+  if(memberCheck&&memberCheck.status==='Expired'){err.textContent='Cannot schedule a session for '+memberCheck.name+'. Their membership has expired. Please renew their membership first.';err.style.display='block';return;}
   if(end<=start){err.textContent='Invalid time range. The end time must be after the start time.';err.style.display='block';return;}
   const sessions=DB.get(KEY.sessions);
   // Conflict: same trainer, same date, overlapping time
@@ -2428,9 +2559,9 @@ function saveSession(){
   if(editingSessionId){
     const idx=sessions.findIndex(s=>s.id===editingSessionId);
     if(idx>-1)sessions[idx]={...sessions[idx],...data,editedBy:currentUser.name,editedByUsername:currentUser.username,editedByRole:currentUser.role,editedAt:today()};
-    DB.set(KEY.sessions,sessions);toast('Session updated.');
+    DB.set(KEY.sessions,sessions);logActivity('Edited','Session',data.memberName+' with '+data.trainerName,'Date: '+data.date+' | '+data.start+'–'+data.end+' | Type: '+data.type);toast('Session updated.');
   } else {
-    sessions.push({id:uid(),...data,createdBy:currentUser.name,createdByUsername:currentUser.username,createdByRole:currentUser.role,createdAt:today()});DB.set(KEY.sessions,sessions);toast('Session Scheduled Successfully.');
+    sessions.push({id:uid(),...data,createdBy:currentUser.name,createdByUsername:currentUser.username,createdByRole:currentUser.role,createdAt:today()});DB.set(KEY.sessions,sessions);logActivity('Added','Session',data.memberName+' with '+data.trainerName,'Date: '+data.date+' | '+data.start+'–'+data.end+' | Type: '+data.type);toast('Session Scheduled Successfully.');
   }
   closeModal('sessionModal');renderSchedule();if(currentUser.role==='admin'||currentUser.role==='staff'){renderDashboard();}
 }
@@ -2439,8 +2570,15 @@ function toggleSessionStatus(id){
   if(idx<0)return;
   const s=sessions[idx];
   const cycle={Scheduled:'Completed',Completed:'Cancelled',Cancelled:'Scheduled'};
-  sessions[idx].status=cycle[s.status]||'Scheduled';
-  DB.set(KEY.sessions,sessions);toast(`Session marked as ${sessions[idx].status}.`,'info');renderSchedule();
+  const newStatus=cycle[s.status]||'Scheduled';
+  sessions[idx].status=newStatus;
+  if(!sessions[idx].statusLog)sessions[idx].statusLog=[];
+  sessions[idx].statusLog.push({
+    from:s.status,to:newStatus,
+    by:currentUser.name,byUsername:currentUser.username,byRole:currentUser.role,
+    at:new Date().toISOString()
+  });
+  DB.set(KEY.sessions,sessions);logActivity('Status Changed','Session',(s.memberName||'Unknown')+' with '+(s.trainerName||'Unknown'),'Date: '+s.date+' | '+s.start+'–'+s.end+' | '+s.status+' → '+newStatus);toast(`Session marked as ${newStatus}.`,'info');renderSchedule();
 }
 function deleteSession(id){
   const s=DB.get(KEY.sessions).find(x=>x.id===id);
@@ -2452,7 +2590,7 @@ function deleteSession(id){
     <div><span style="color:var(--gray-500);width:80px;display:inline-block">Type:</span> <strong style="color:var(--white)">${s.type||'—'}</strong></div>
   </div>`:'';
   openConfirm('Delete Session',`Are you sure you want to delete this session? This cannot be undone.${detail}`,()=>{
-    const sessions=DB.get(KEY.sessions).filter(x=>x.id!==id);DB.set(KEY.sessions,sessions);toast('Session deleted.');renderSchedule();
+    const dS=DB.get(KEY.sessions).find(x=>x.id===id);if(dS)logActivity('Deleted','Session',(dS.memberName||'?')+' with '+(dS.trainerName||'?'),'Date: '+dS.date+' | '+dS.start+'–'+dS.end+' | Type: '+(dS.type||'?'));const sessions=DB.get(KEY.sessions).filter(x=>x.id!==id);DB.set(KEY.sessions,sessions);toast('Session deleted.');renderSchedule();
   });
 }
 
@@ -2733,14 +2871,43 @@ function savePlan(){
     const idx=plans.findIndex(p=>p.id===editingPlanId);
     if(idx>-1)plans[idx]={...plans[idx],...data};DB.set(KEY.plans,plans);toast('Plan updated.');
   } else {plans.push({id:uid(),...data});DB.set(KEY.plans,plans);toast('Plan created.');}
-  closeModal('planModal');renderPlans();
+  closeModal('planModal');renderPlans();renderExplorePlans();
 }
+function renderExplorePlans(){
+  const container=document.getElementById('exploreCardsContainer');
+  if(!container)return;
+  const plans=DB.get(KEY.plans).filter(p=>p.status==='Active');
+  const badges=['Starter','Popular','Best Value','Elite','Premium','Top Pick'];
+  const featuredIdx=1; // second plan is "featured" (orange border)
+  let html=plans.map((p,i)=>{
+    const isFeatured=i===featuredIdx;
+    const durLabel=p.duration===1?'/mo':(p.duration===3?'/3mo':'/'+p.duration+'mo');
+    const sessLabel=p.sessions==='Unlimited'?'Unlimited Sessions':(p.sessions+' Sessions');
+    const benefitLines=p.benefits?p.benefits.split('\n').filter(b=>b.trim()).map(b=>`<li>&#10003; ${b.trim()}</li>`).join(''):'<li>&#10003; Gym Access</li>';
+    const badge=badges[i]||'Plan';
+    return`<div class="explore-card${isFeatured?' featured':''}">
+      <div class="ec-badge">${badge}</div>
+      <div class="ec-name">${p.name}</div>
+      <div class="ec-price">&#8369;${Number(p.price).toLocaleString()}<span>${durLabel}</span></div>
+      <ul class="ec-features">${benefitLines}<li>&#10003; ${sessLabel}</li></ul>
+    </div>`;
+  }).join('');
+  // Always append the static Walk-In card at the end
+  html+=`<div class="explore-card walkin-card">
+    <div class="ec-badge">No Commitment</div>
+    <div class="ec-name">Walk-In</div>
+    <div class="ec-price">&#8369;100<span>/day</span></div>
+    <ul class="ec-features"><li>&#10003; Full Gym Access</li><li>&#10003; Single Day Pass</li><li>&#10003; No Registration</li><li>&#10003; Pay at Front Desk</li></ul>
+    <div class="walkin-note">&#9888; For occasional visitors.<br>No membership required.</div>
+  </div>`;
+  container.innerHTML=html;
+}
+
 function deletePlan(id){
   const p=DB.getOne(KEY.plans,id);
-  const activeCount=DB.get(KEY.members).filter(m=>m.planId===id&&m.status!=='Archived').length;
   if(activeCount>0){toast('Cannot delete this plan. There are active members currently enrolled in it.','error');return;}
   openConfirm('Delete Plan',`Delete plan "${p?p.name:''}"?`,()=>{
-    const plans=DB.get(KEY.plans).filter(p=>p.id!==id);DB.set(KEY.plans,plans);toast('Plan deleted.');renderPlans();
+    const plans=DB.get(KEY.plans).filter(p=>p.id!==id);DB.set(KEY.plans,plans);toast('Plan deleted.');renderPlans();renderExplorePlans();
   });
 }
 
@@ -2756,13 +2923,18 @@ function renderReports(){
     <button class="rtab ${reportType==='attendance'?'active':''}" onclick="reportType='attendance';renderReports()">📋 Attendance</button>
     <button class="rtab ${reportType==='membership'?'active':''}" onclick="reportType='membership';renderReports()">👥 Membership</button>
     <button class="rtab ${reportType==='trainer'?'active':''}" onclick="reportType='trainer';renderReports()">🏋️ Trainer Schedule</button>
+    <button class="rtab ${reportType==='activity'?'active':''}" onclick="reportType='activity';renderReports()">📝 Activity Log</button>
   </div>
   <div class="report-filters" id="reportFilters">
     <div class="form-group"><label>From Date</label><input type="date" id="rpt_from" class="search-input"></div>
     <div class="form-group"><label>To Date</label><input type="date" id="rpt_to" class="search-input" value="${today()}"></div>
     ${reportType==='revenue'?`<div class="form-group"><label>Plan</label><select id="rpt_plan" class="filter-sel"><option value="all">All Plans</option>${DB.get(KEY.plans).map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div>`:''}
     ${reportType==='attendance'?`<div class="form-group"><label>Member</label><select id="rpt_trainer" class="filter-sel"><option value="all">All Members</option>${DB.get(KEY.members).filter(m=>m.status!=='Archived').map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}</select></div>`:''}
-    ${reportType==='trainer'?`<div class="form-group"><label>Trainer</label><select id="rpt_trainer_filter" class="filter-sel"><option value="all">All Trainers</option>${DB.get(KEY.users).filter(u=>u.role==='trainer').map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}</select></div>`:''}
+    ${reportType==='membership'?`<div class="form-group"><label>Search Member</label><div style="position:relative"><input type="text" id="rpt_member_search" class="search-input" placeholder="🔍 Type member name…" oninput="filterMemberReportList(this.value)" autocomplete="off" style="width:100%"><div id="rpt_member_drop" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--navy-800);border:1.5px solid var(--orange);border-radius:8px;z-index:200;max-height:180px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.5)">${DB.get(KEY.members).filter(m=>m.status!=='Archived').map(m=>`<div class="country-item" onclick="selectMemberReport('${m.id}','${m.name.replace(/'/g,"\\'")}')"><span>${m.name}</span></div>`).join('')}</div></div><input type="hidden" id="rpt_member_id" value="all"></div>`:''}
+
+    ${reportType==='trainer'?`<div class="form-group"><label>Search Trainer</label><div style="position:relative"><input type="text" id="rpt_trainer_search" class="search-input" placeholder="🔍 Type trainer name…" oninput="filterTrainerReportList(this.value)" autocomplete="off" style="width:100%"><div id="rpt_trainer_drop" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--navy-800);border:1.5px solid var(--orange);border-radius:8px;z-index:200;max-height:180px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.5)">${DB.get(KEY.users).filter(u=>u.role==='trainer').map(u=>`<div class="country-item" onclick="selectTrainerReport('${u.id}','${u.name.replace(/'/g,"\\'")}')"><span>${u.name}</span></div>`).join('')}</div></div><input type="hidden" id="rpt_trainer_filter" value="all"></div>`:''}
+
+    ${reportType==='activity'?`<div class="form-group"><label>Category</label><select id="rpt_act_cat" class="filter-sel"><option value="all">All</option><option value="Member">Member</option><option value="Session">Session</option></select></div><div class="form-group"><label>Action</label><select id="rpt_act_action" class="filter-sel"><option value="all">All Actions</option><option value="Added">Added</option><option value="Edited">Edited</option><option value="Deleted">Deleted</option><option value="Status Changed">Status Changed</option></select></div>`:''}
     <div class="form-group" style="align-self:end"><button class="btn-primary" onclick="generateReport()">Generate Report</button></div>
   </div>
   <div class="report-output" id="reportOutput"></div>`;
@@ -2864,7 +3036,7 @@ function generateReport(){
     if(trainerFil!=='all')sessions=sessions.filter(s=>s.trainerId===trainerFil);
     if(!sessions.length){output.innerHTML=`<div class="empty-state"><div class="empty-icon">📊</div><p>No trainer schedule data found for the selected filters.</p></div>`;return;}
     const totalSessions=sessions.length;
-    const uniqueTrainers=[...new Set(sessions.map(s=>s.trainerId))].length;
+    const uniqueTrainers=trainerFil!=='all'?1:[...new Set(sessions.map(s=>s.trainerId))].length;
     const uniqueMembers=[...new Set(sessions.map(s=>s.memberId).filter(Boolean))].length;
     const statusCounts={Scheduled:0,Completed:0,Cancelled:0};
     sessions.forEach(s=>{if(statusCounts[s.status]!==undefined)statusCounts[s.status]++;});
@@ -2894,22 +3066,80 @@ function generateReport(){
         <td>${s.notes||'—'}</td>
       </tr>`;
     }).join('');
+    const trainerFil2=document.getElementById('rpt_trainer_filter')?.value||'all';
+    const singleTrainer=trainerFil2!=='all'?allUsers.find(u=>u.id===trainerFil2):null;
     output.innerHTML=`
     <div class="stats-grid">
-      <div class="stat-card orange"><div class="stat-label">Total Sessions</div><div class="stat-value">${totalSessions}</div></div>
+      <div class="stat-card orange"><div class="stat-label">Total Sessions</div><div class="stat-value">${totalSessions}</div>${singleTrainer?`<div class="stat-hint">${singleTrainer.name}</div>`:''}</div>
       <div class="stat-card green"><div class="stat-label">Completed</div><div class="stat-value">${statusCounts.Completed}</div></div>
       <div class="stat-card gold"><div class="stat-label">Scheduled</div><div class="stat-value">${statusCounts.Scheduled}</div></div>
       <div class="stat-card blue" style="border-left-color:#ef4444"><div class="stat-label">Cancelled</div><div class="stat-value">${statusCounts.Cancelled}</div></div>
+      ${!singleTrainer?`<div class="stat-card blue"><div class="stat-label">Trainers</div><div class="stat-value">${uniqueTrainers}</div></div>`:`<div class="stat-card blue"><div class="stat-label">Members Handled</div><div class="stat-value">${uniqueMembers}</div></div>`}
     </div>
     <div class="table-card">
       <div class="table-header"><h3>Trainer Schedule Records</h3><div style="display:flex;gap:8px"><button class="btn-secondary btn-sm" onclick="printReport()">🖨️ Print</button><button class="btn-secondary btn-sm" onclick="exportCSV('trainer')">📥 Export CSV</button></div></div>
       <div style="overflow-x:auto"><table><thead><tr><th>Date</th><th>Trainer</th><th>Time</th><th>Session Type</th><th>Member</th><th>Status</th><th>Created / Edited By</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table></div>
     </div>`;
+  } else if(reportType==='activity'){
+    let log=DB.get(KEY.activityLog)||[];
+    const from2=document.getElementById('rpt_from')?.value||'';
+    const to2=document.getElementById('rpt_to')?.value||today();
+    if(from2)log=log.filter(e=>e.at>=from2+'T00:00:00.000Z'||e.at>=from2);
+    if(to2)log=log.filter(e=>e.at<=to2+'T23:59:59.999Z'||e.at<=to2+'T23:59:59');
+    const catF=document.getElementById('rpt_act_cat')?.value||'all';
+    const actF=document.getElementById('rpt_act_action')?.value||'all';
+    if(catF!=='all')log=log.filter(e=>e.category===catF);
+    if(actF!=='all')log=log.filter(e=>e.action===actF);
+    const actionColor={'Added':'#00e676','Edited':'#ffc107','Deleted':'#ff1744','Status Changed':'#60a5fa'};
+    const actionBg={'Added':'rgba(0,230,118,.12)','Edited':'rgba(255,193,7,.12)','Deleted':'rgba(255,23,68,.12)','Status Changed':'rgba(96,165,250,.12)'};
+    const catIcon={'Member':'👤','Session':'📅'};
+    const roleColorMap={admin:'var(--orange)',staff:'#7986ff',trainer:'var(--green)'};
+    const totalAdded=log.filter(e=>e.action==='Added').length;
+    const totalEdited=log.filter(e=>e.action==='Edited').length;
+    const totalDeleted=log.filter(e=>e.action==='Deleted').length;
+    const totalStatus=log.filter(e=>e.action==='Status Changed').length;
+    if(!log.length){output.innerHTML=`<div class="empty-state"><div class="empty-icon">📝</div><p>No activity recorded yet. Actions like adding, editing, or deleting members and sessions will appear here.</p></div>`;return;}
+    const rows=log.map(e=>{
+      const clr=actionColor[e.action]||'var(--gray-300)';
+      const bg=actionBg[e.action]||'rgba(255,255,255,.05)';
+      const roleClr=roleColorMap[e.byRole]||'var(--gray-300)';
+      const dt=new Date(e.at);
+      const dateStr=dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      const timeStr=dt.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      return`<tr>
+        <td><span style="font-size:11px;font-weight:800;padding:3px 9px;border-radius:4px;background:${bg};color:${clr};letter-spacing:.5px;text-transform:uppercase;white-space:nowrap">${e.action}</span></td>
+        <td><span style="font-size:12px;font-weight:700;color:var(--gray-100)">${catIcon[e.category]||'•'} ${e.category}</span></td>
+        <td style="font-size:12px;color:var(--white);font-weight:600;max-width:200px">${e.detail||'—'}</td>
+        <td style="font-size:11px;color:var(--gray-500);max-width:200px">${e.extra||'—'}</td>
+        <td><div style="font-size:12px;font-weight:600;color:var(--gray-100)">${e.by||'—'} <span style="font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;background:rgba(255,255,255,.07);color:${roleClr};margin-left:3px;text-transform:uppercase">${e.byRole||''}</span></div></td>
+        <td style="white-space:nowrap"><div style="font-size:12px;color:var(--gray-100);font-weight:600">${dateStr}</div><div style="font-size:11px;color:var(--gray-500);margin-top:2px">🕐 ${timeStr}</div></td>
+      </tr>`;}).join('');
+    output.innerHTML=`
+    <div class="stats-grid">
+      <div class="stat-card green"><div class="stat-label">Added</div><div class="stat-value">${totalAdded}</div></div>
+      <div class="stat-card gold"><div class="stat-label">Edited</div><div class="stat-value">${totalEdited}</div></div>
+      <div class="stat-card orange" style="border-top-color:#ff1744"><div class="stat-label">Deleted</div><div class="stat-value">${totalDeleted}</div></div>
+      <div class="stat-card blue"><div class="stat-label">Status Changed</div><div class="stat-value">${totalStatus}</div></div>
+    </div>
+    <div class="table-card">
+      <div class="table-header"><h3>Activity Log</h3><div style="display:flex;gap:8px"><button class="btn-secondary btn-sm" onclick="printReport()">🖨️ Print</button></div></div>
+      <div style="overflow-x:auto"><table><thead><tr><th>Action</th><th>Category</th><th>Name / Detail</th><th>Info</th><th>Done By</th><th>Date & Time</th></tr></thead><tbody>${rows}</tbody></table></div>
+    </div>`;
   } else {
     const members=DB.get(KEY.members).filter(m=>m.status!=='Archived');
+    const allPayments=DB.get(KEY.payments);
     let filtered=members;
     if(from)filtered=filtered.filter(m=>(m.createdAt||m.startDate)>=from);
     if(to)filtered=filtered.filter(m=>(m.createdAt||m.startDate)<=to);
+    // Member search filter
+    const memberIdFilter=document.getElementById('rpt_member_id')?.value||'all';
+    let singleMemberMode=false;
+    let singleMember=null;
+    if(memberIdFilter!=='all'){
+      filtered=filtered.filter(m=>m.id===memberIdFilter);
+      singleMemberMode=true;
+      singleMember=members.find(m=>m.id===memberIdFilter);
+    }
     if(!filtered.length){output.innerHTML=`<div class="empty-state"><div class="empty-icon">📊</div><p>No data found for the selected filters. Try adjusting the date range.</p></div>`;return;}
     const active=filtered.filter(m=>m.status==='Active'||m.status==='Expiring Soon').length;
     const expired=filtered.filter(m=>m.status==='Expired').length;
@@ -2918,6 +3148,7 @@ function generateReport(){
     const rows=filtered.map(m=>{
       const pl=DB.get(KEY.plans).find(p=>p.id===m.planId);
       const badgeCls={Active:'badge-active',Expired:'badge-expired','Expiring Soon':'badge-expiring',Suspended:'badge-suspended'}[m.status]||'';
+      const payCount=allPayments.filter(p=>p.memberId===m.id).length;
       // Created By
       const createdByUser=m.createdBy?allUsers.find(u=>u.name===m.createdBy||u.username===m.createdByUsername):null;
       const cRoleColor=createdByUser?roleColorMap[createdByUser.role]||'var(--gray-300)':'var(--gray-300)';
@@ -2928,20 +3159,78 @@ function generateReport(){
       const eRoleColor=editedByUser?roleColorMap[editedByUser.role]||'var(--gray-300)':'var(--gray-300)';
       const eRoleTag=editedByUser?`<span style="font-size:9px;font-weight:800;padding:2px 5px;border-radius:4px;background:rgba(255,255,255,.07);color:${eRoleColor};margin-left:4px;text-transform:uppercase">${editedByUser.role}</span>`:'';
       const editedLine=m.editedBy?`<div style="font-size:11px;color:var(--gray-500);margin-top:2px">✎ ${m.editedBy}${eRoleTag}</div>`:'';
-      return`<tr><td>${m.id}</td><td>${m.name}</td><td>${pl?pl.name:'—'}</td><td>${formatDate(m.startDate)}</td><td>${formatDate(m.expiryDate)}</td><td><span class="badge ${badgeCls}">${m.status}</span></td><td><div>${createdLine}${editedLine}</div></td></tr>`;
+      return`<tr><td>${m.id}</td><td>${m.name}</td><td>${pl?pl.name:'—'}</td><td>${formatDate(m.startDate)}</td><td>${formatDate(m.expiryDate)}</td><td><span class="badge ${badgeCls}">${m.status}</span></td><td style="text-align:center"><span style="background:rgba(255,87,34,.12);color:var(--orange);font-size:13px;font-weight:800;padding:3px 10px;border-radius:6px;border:1px solid rgba(255,87,34,.25)">${payCount}x</span></td><td><div>${createdLine}${editedLine}</div></td></tr>`;
     }).join('');
+    // If single member, show their payment history too
+    let payHistorySection='';
+    if(singleMemberMode&&singleMember){
+      const memberPayments=allPayments.filter(p=>p.memberId===singleMember.id).slice().reverse();
+      const totalPaid=memberPayments.reduce((a,p)=>a+Number(p.amount),0);
+      const payRows=memberPayments.length?memberPayments.map(p=>`<tr><td>${p.id}</td><td>${p.planName}</td><td style="color:var(--green);font-weight:700">₱${Number(p.amount).toLocaleString()}</td><td>${formatDate(p.date)}</td><td>${formatDate(p.newExpiry)}</td><td>${p.method||'—'}</td><td>${p.recordedBy||'—'}</td></tr>`).join(''):`<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">💳</div><p>No payments found</p></div></td></tr>`;
+      payHistorySection=`
+      <div class="table-card" style="margin-top:16px">
+        <div class="table-header"><h3>💳 Payment History — ${singleMember.name}</h3><span style="font-size:12px;color:var(--gray-500);font-weight:400">${memberPayments.length} payment${memberPayments.length!==1?'s':''} · Total: <span style="color:var(--green);font-weight:700">₱${totalPaid.toLocaleString()}</span></span></div>
+        <div style="overflow-x:auto"><table><thead><tr><th>Pay ID</th><th>Plan</th><th>Amount</th><th>Date</th><th>New Expiry</th><th>Method</th><th>Recorded By</th></tr></thead><tbody>${payRows}</tbody></table></div>
+      </div>`;
+    }
     output.innerHTML=`
     <div class="stats-grid">
       <div class="stat-card orange"><div class="stat-label">Total Members</div><div class="stat-value">${filtered.length}</div></div>
       <div class="stat-card green"><div class="stat-label">Active</div><div class="stat-value">${active}</div></div>
       <div class="stat-card gold"><div class="stat-label">Expired</div><div class="stat-value">${expired}</div></div>
+      ${singleMemberMode&&singleMember?`<div class="stat-card blue"><div class="stat-label">Total Payments</div><div class="stat-value">${allPayments.filter(p=>p.memberId===singleMember.id).length}x</div><div class="stat-hint">membership renewals</div></div>`:''}
     </div>
     <div class="table-card">
       <div class="table-header"><h3>Membership Report</h3><div style="display:flex;gap:8px"><button class="btn-secondary btn-sm" onclick="printReport()">🖨️ Print</button><button class="btn-secondary btn-sm" onclick="exportCSV('membership')">📥 Export CSV</button></div></div>
-      <div style="overflow-x:auto"><table><thead><tr><th>ID</th><th>Name</th><th>Plan</th><th>Start</th><th>Expiry</th><th>Status</th><th>Created / Edited By</th></tr></thead><tbody>${rows}</tbody></table></div>
-    </div>`;
+      <div style="overflow-x:auto"><table><thead><tr><th>ID</th><th>Name</th><th>Plan</th><th>Start</th><th>Expiry</th><th>Status</th><th>Times Paid</th><th>Created / Edited By</th></tr></thead><tbody>${rows}</tbody></table></div>
+    </div>${payHistorySection}`;
   }
 }
+function filterTrainerReportList(val){
+  const drop=document.getElementById('rpt_trainer_drop');
+  if(!drop)return;
+  const all=DB.get(KEY.users).filter(u=>u.role==='trainer');
+  const filtered=val?all.filter(u=>u.name.toLowerCase().includes(val.toLowerCase())):all;
+  drop.style.display=filtered.length?'block':'none';
+  drop.innerHTML=filtered.map(u=>`<div class="country-item" onclick="selectTrainerReport('${u.id}','${u.name.replace(/'/g,"\\'")}')"><span>${u.name}</span></div>`).join('');
+  if(!val){document.getElementById('rpt_trainer_filter').value='all';}
+}
+function selectTrainerReport(id,name){
+  const inp=document.getElementById('rpt_trainer_search');
+  const hid=document.getElementById('rpt_trainer_filter');
+  const drop=document.getElementById('rpt_trainer_drop');
+  if(inp)inp.value=name;
+  if(hid)hid.value=id;
+  if(drop)drop.style.display='none';
+}
+
+function filterMemberReportList(val){
+  const drop=document.getElementById('rpt_member_drop');
+  if(!drop)return;
+  const all=DB.get(KEY.members).filter(m=>m.status!=='Archived');
+  const filtered=val?all.filter(m=>m.name.toLowerCase().includes(val.toLowerCase())):all;
+  drop.style.display=filtered.length?'block':'none';
+  drop.innerHTML=filtered.map(m=>`<div class="country-item" onclick="selectMemberReport('${m.id}','${m.name.replace(/'/g,"\\'")}')">${m.name}</div>`).join('');
+  if(!val){document.getElementById('rpt_member_id').value='all';}
+}
+function selectMemberReport(id,name){
+  const inp=document.getElementById('rpt_member_search');
+  const hid=document.getElementById('rpt_member_id');
+  const drop=document.getElementById('rpt_member_drop');
+  if(inp)inp.value=name;
+  if(hid)hid.value=id;
+  if(drop)drop.style.display='none';
+}
+document.addEventListener('click',function(e){
+  if(!e.target.closest('#rpt_member_search')&&!e.target.closest('#rpt_member_drop')){
+    const drop=document.getElementById('rpt_member_drop');
+    if(drop)drop.style.display='none';
+  }
+  if(!e.target.closest('#rpt_trainer_search')&&!e.target.closest('#rpt_trainer_drop')){
+    const drop=document.getElementById('rpt_trainer_drop');
+    if(drop)drop.style.display='none';
+  }
+});
 function printReport(){
   const output=document.getElementById('reportOutput');
   if(!output||!output.innerHTML.trim()){toast('Generate a report first.','error');return;}
@@ -3301,6 +3590,17 @@ function updateHeroMemberCount(){
   if(sess){currentUser=sess;loadApp();}
 })();
 
+// ======================================================================
+// ACTIVITY LOG
+// ======================================================================
+function logActivity(action,category,detail,extra){
+  const log=DB.get(KEY.activityLog)||[];
+  log.unshift({id:'ACT'+Date.now(),action,category,detail,extra:extra||'',
+    by:currentUser?currentUser.name:'System',byUsername:currentUser?currentUser.username:'',
+    byRole:currentUser?currentUser.role:'',at:new Date().toISOString()});
+  if(log.length>500)log.length=500;
+  DB.set(KEY.activityLog,log);
+}
 // ======================================================================
 // MOBILE RESPONSIVE HELPERS
 // ======================================================================
